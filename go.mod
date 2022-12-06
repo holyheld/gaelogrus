@@ -1,4 +1,4 @@
-module gaelogrus
+module github.com/viaMover/gaelogrus
 
 go 1.18
 
