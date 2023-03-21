@@ -42,6 +42,11 @@ func WithProjectID(pid string) Option {
 
 // Format formats a logrus entry in Stackdriver format.
 func (f *Formatter) Format(e *logrus.Entry) ([]byte, error) {
+	// perform error type fix
+	errV, exists := e.Data[logrus.ErrorKey]
+	if exists {
+		e.Data[logrus.ErrorKey] = fmt.Sprint(errV)
+	}
 	ee := logEntry{
 		Severity: string(levelToSeverity[e.Level]),
 		Message:  e.Message,
