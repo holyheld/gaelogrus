@@ -1,4 +1,4 @@
-module github.com/viaMover/gaelogrus
+module github.com/viamover/gaelogrus
 
 go 1.16
 
