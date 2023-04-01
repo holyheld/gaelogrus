@@ -53,9 +53,9 @@ func (f *Formatter) Format(e *logrus.Entry) ([]byte, error) {
 		Data:     e.Data,
 	}
 
-	xctc := traceID(e.Context)
+	xctc := TraceID(e.Context)
 	if xctc != "" {
-		traceID, spanID := parseXCloudTraceContext(xctc)
+		traceID, spanID := ParseXCloudTraceContext(xctc)
 		if traceID != "" && spanID != "" {
 			ee.Trace = fmt.Sprintf("projects/%s/traces/%s", f.projectID, traceID)
 			ee.SpanID = spanID
