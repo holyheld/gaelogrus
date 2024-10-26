@@ -4,7 +4,7 @@
 to support Google Cloud Stackdriver (logging tool) when application runs in Google App Engine
 
 ## Installation
-* `go get -u github.com/viaMover/gaelogrus`
+* `go get -u github.com/holyheld/gaelogrus`
 
 ## Usage notes
 ```go
@@ -12,7 +12,7 @@ package main
 
 import (
     "github.com/sirupsen/logrus"
-    "github.com/viaMover/gaelogrus"
+    "github.com/holyheld/gaelogrus"
     
     "net/http"
 )
