@@ -48,10 +48,11 @@ type logEntry struct {
 	// array, such as "000000000000004a"
 	SpanID string `json:"logging.googleapis.com/spanId,omitempty"`
 
-	Severity  string      `json:"severity,omitempty"`
-	Data      interface{} `json:"data,omitempty"`
-	Message   string      `json:"message"`
-	WcsUserID string      `json:"wcsUserID,omitempty"`
+	Severity string      `json:"severity,omitempty"`
+	Data     interface{} `json:"data,omitempty"`
+	Message  string      `json:"message"`
+	UserID   string      `json:"userId,omitempty"`
+	UserMeta interface{} `json:"userMeta,omitempty"`
 }
 
 // ParseXCloudTraceContext parses provided header value in format of "X-Cloud-Trace-Context: TRACE_ID/SPAN_ID;o=TRACE_TRUE"

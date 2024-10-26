@@ -62,6 +62,13 @@ func (f *Formatter) Format(e *logrus.Entry) ([]byte, error) {
 		}
 	}
 
+	userID, ok := e.Context.Value(LogUserIDContextKey).(string)
+	if ok {
+		ee.UserID = userID
+	}
+
+	ee.UserMeta = e.Context.Value(LogUserMetaContextKey)
+
 	b, err := json.Marshal(ee)
 	if err != nil {
 		return nil, err

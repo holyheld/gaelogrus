@@ -14,8 +14,12 @@ import (
 
 type LogContextKind string
 
-const LogTraceContextKey LogContextKind = "logTraceID"
-const LogEntryContextKey LogContextKind = "logEntry"
+const (
+	LogTraceContextKey    LogContextKind = "logTraceID"
+	LogEntryContextKey    LogContextKind = "logEntry"
+	LogUserIDContextKey   LogContextKind = "logUserID"
+	LogUserMetaContextKey LogContextKind = "logUserMeta"
+)
 
 // XCloudTraceContext middleware extracts the X-Cloud-Trace-Context
 // from the request header and injects it into the context. The value
