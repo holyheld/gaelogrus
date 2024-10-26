@@ -110,7 +110,7 @@ func RequestLogger(next http.Handler) http.Handler {
 				"resp_status":       responseData.status,
 				"resp_elapsed_ms":   float64(time.Since(start) / 1000000.0),
 				"resp_bytes_length": responseData.size,
-			}).Info("request completed")
+			}).Log(getLogLevel(r, responseData.status), "request completed")
 		}()
 
 		next.ServeHTTP(&lw, r)
@@ -146,4 +146,35 @@ func Recoverer(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(fn)
+}
+
+func getLogLevel(r *http.Request, status int) logrus.Level {
+	if status == 0 {
+		return logrus.WarnLevel
+	}
+
+	switch r.Method {
+	case http.MethodHead:
+		return logrus.TraceLevel
+	case http.MethodConnect:
+		return logrus.TraceLevel
+	case http.MethodOptions:
+		return logrus.TraceLevel
+	case http.MethodTrace:
+		return logrus.TraceLevel
+	}
+
+	if status < 200 {
+		return logrus.TraceLevel
+	}
+
+	if status < 400 {
+		return logrus.InfoLevel
+	}
+
+	if status < 500 {
+		return logrus.WarnLevel
+	}
+
+	return logrus.ErrorLevel
 }
