@@ -1,7 +1,6 @@
 package gaelogrus
 
 import (
-	"os"
 	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
@@ -15,10 +14,8 @@ import (
 type LogContextKind string
 
 const (
-	LogTraceContextKey    LogContextKind = "logTraceID"
-	LogEntryContextKey    LogContextKind = "logEntry"
-	LogUserIDContextKey   LogContextKind = "logUserID"
-	LogUserMetaContextKey LogContextKind = "logUserMeta"
+	LogTraceContextKey LogContextKind = "logTraceID"
+	LogEntryContextKey LogContextKind = "logEntry"
 )
 
 // XCloudTraceContext middleware extracts the X-Cloud-Trace-Context
@@ -40,6 +37,19 @@ func AttachLogger(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, LogEntryContextKey, contextLogger)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// PutLogger bounds provided logrus.Logger to the
+// request context and injects contextualized logger into the context
+func PutLogger(logger *logrus.Entry) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			contextLogger := logger.WithContext(ctx)
+			ctx = context.WithValue(ctx, LogEntryContextKey, contextLogger)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 // GetLogger extracts contextualized logger from request context.
@@ -123,21 +133,32 @@ func RequestLogger(next http.Handler) http.Handler {
 func Recoverer(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
-			if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
+			rvr := recover()
+			if rvr == nil {
+				return
+			}
 
-				logEntity := GetLogger(r.Context())
-				if logEntity != nil {
-					debugStack := debug.Stack()
-					s := prettyStack{}
-					out, err := s.parse(debugStack, rvr)
-					if err == nil {
-						logEntity.Error(string(out))
-					} else {
-						// print stdlib output as a fallback
-						os.Stderr.Write(debugStack)
-					}
-				}
+			if rvr == http.ErrAbortHandler {
+				// we don't recover http.ErrAbortHandler so the response
+				// to the client is aborted, this should not be logged
+				panic(rvr)
+			}
 
+			debugStack := debug.Stack()
+			s := prettyStack{}
+			out, err := s.parse(debugStack, rvr)
+			if err != nil {
+				out = debugStack
+			}
+
+			logEntity := GetLogger(r.Context())
+			if logEntity != nil {
+				logEntity.Error(string(out))
+			} else {
+				recovererErrorWriter.Write(out)
+			}
+
+			if r.Header.Get("Connection") != "Upgrade" {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()

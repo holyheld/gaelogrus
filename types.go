@@ -16,11 +16,9 @@ const (
 	sDEFAULT   severity = "DEFAULT"
 	sDEBUG     severity = "DEBUG"
 	sINFO      severity = "INFO"
-	sNOTICE    severity = "NOTICE"
 	sWARNING   severity = "WARNING"
 	sERROR     severity = "ERROR"
 	sCRITICAL  severity = "CRITICAL"
-	sALERT     severity = "ALERT"
 	sEMERGENCY severity = "EMERGENCY"
 )
 
@@ -39,20 +37,18 @@ func TraceID(ctx context.Context) string {
 
 // this is JSON format for producing logs via stdout, but keeping them grouped by request
 type logEntry struct {
-	// (optional) Trace string for GAE log threading
+	// Trace (optional) Trace string for GAE log threading
 	Trace string `json:"logging.googleapis.com/trace,omitempty"`
 
-	// (optional) Span ID within the trace
+	// SpanID (optional) Span ID within the trace
 	// For Trace spans, this is the same format that the Trace API
 	// v2 uses: a 16-character hexadecimal encoding of an 8-byte
 	// array, such as "000000000000004a"
 	SpanID string `json:"logging.googleapis.com/spanId,omitempty"`
 
-	Severity string      `json:"severity,omitempty"`
-	Data     interface{} `json:"data,omitempty"`
-	Message  string      `json:"message"`
-	UserID   string      `json:"userId,omitempty"`
-	UserMeta interface{} `json:"userMeta,omitempty"`
+	Severity string         `json:"severity,omitempty"`
+	Message  string         `json:"message,omitempty"`
+	Data     map[string]any `json:"data,omitempty"`
 }
 
 // ParseXCloudTraceContext parses provided header value in format of "X-Cloud-Trace-Context: TRACE_ID/SPAN_ID;o=TRACE_TRUE"
