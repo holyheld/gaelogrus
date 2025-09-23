@@ -1,6 +1,10 @@
 package gaelogrus
 
 import (
+	"net/url"
+	"time"
+
+	"github.com/holyheld/gaelogrus/pool"
 	"github.com/sirupsen/logrus"
 
 	"encoding/json"
@@ -19,14 +23,17 @@ var levelToSeverity = map[logrus.Level]severity{
 
 type Formatter struct {
 	projectID string
+	logID     string
+	pool      logrus.BufferPool
 }
 
 // GAEStandardFormatter returns a new Formatter.
 func GAEStandardFormatter(options ...Option) *Formatter {
-	f := Formatter{}
+	f := Formatter{pool: pool.NewBufferPool(0)}
 	for _, option := range options {
 		option(&f)
 	}
+
 	return &f
 }
 
@@ -40,17 +47,46 @@ func WithProjectID(pid string) Option {
 	}
 }
 
+func WithLogID(lid string) Option {
+	return func(f *Formatter) {
+		f.logID = url.PathEscape(lid)
+	}
+}
+
+func WithBufferPool(bp logrus.BufferPool) Option {
+	return func(f *Formatter) {
+		f.pool = bp
+	}
+}
+
 // Format formats a logrus entry in Stackdriver format.
 func (f *Formatter) Format(e *logrus.Entry) ([]byte, error) {
+	cloned := e.Dup().Data
+
 	// perform error type fix
 	errV, exists := e.Data[logrus.ErrorKey]
 	if exists {
-		e.Data[logrus.ErrorKey] = fmt.Sprint(errV)
+		cloned[logrus.ErrorKey] = fmt.Sprint(errV)
 	}
+
+	cloned["message"] = e.Message
+	reqV, _ := cloned["request"].(*httpRequestEntry)
+	delete(cloned, "request")
+
 	ee := logEntry{
-		Severity: string(levelToSeverity[e.Level]),
-		Message:  e.Message,
-		Data:     e.Data,
+		LogName:     fmt.Sprintf("projects/%s/logs/%s", f.projectID, f.logID),
+		Severity:    string(levelToSeverity[e.Level]),
+		JSONPayload: cloned,
+		Timestamp:   e.Time.UTC().Format(time.RFC3339Nano),
+		HTTPRequest: reqV,
+	}
+
+	if e.HasCaller() {
+		ee.SourceLocation = &sourceLocationEntry{
+			File:     e.Caller.File,
+			Line:     fmt.Sprintf("%d", e.Caller.Line),
+			Function: e.Caller.Function,
+		}
 	}
 
 	xctc := TraceID(e.Context)
@@ -62,16 +98,13 @@ func (f *Formatter) Format(e *logrus.Entry) ([]byte, error) {
 		}
 	}
 
-	userID, ok := e.Context.Value(LogUserIDContextKey).(string)
-	if ok {
-		ee.UserID = userID
-	}
+	buf := f.pool.Get()
+	defer f.pool.Put(buf)
 
-	ee.UserMeta = e.Context.Value(LogUserMetaContextKey)
-
-	b, err := json.Marshal(ee)
+	err := json.NewEncoder(buf).Encode(ee)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to encode data: %w", err)
 	}
-	return append(b, '\n'), nil
+
+	return buf.Bytes(), nil
 }

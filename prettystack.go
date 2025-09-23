@@ -4,16 +4,18 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
+
+var recovererErrorWriter io.Writer = os.Stderr
 
 type prettyStack struct {
 }
 
 func (s prettyStack) parse(debugStack []byte, rvr interface{}) ([]byte, error) {
 	var err error
-	useColor := true
 	buf := &bytes.Buffer{}
 
 	fmt.Fprintf(buf, "\n")
@@ -28,7 +30,7 @@ func (s prettyStack) parse(debugStack []byte, rvr interface{}) ([]byte, error) {
 	// locate panic line, as we may have nested panics
 	for i := len(stack) - 1; i > 0; i-- {
 		lines = append(lines, stack[i])
-		if strings.HasPrefix(stack[i], "panic(0x") {
+		if strings.HasPrefix(stack[i], "panic(") {
 			lines = lines[0 : len(lines)-2] // remove boilerplate
 			break
 		}
@@ -42,7 +44,7 @@ func (s prettyStack) parse(debugStack []byte, rvr interface{}) ([]byte, error) {
 
 	// decorate
 	for i, line := range lines {
-		lines[i], err = s.decorateLine(line, useColor, i)
+		lines[i], err = s.decorateLine(line, i)
 		if err != nil {
 			return nil, err
 		}
@@ -54,22 +56,21 @@ func (s prettyStack) parse(debugStack []byte, rvr interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (s prettyStack) decorateLine(line string, useColor bool, num int) (string, error) {
+func (s prettyStack) decorateLine(line string, num int) (string, error) {
 	line = strings.TrimSpace(line)
 	if strings.HasPrefix(line, "\t") || strings.Contains(line, ".go:") {
-		return s.decorateSourceLine(line, useColor, num)
-	} else if strings.HasSuffix(line, ")") {
-		return s.decorateFuncCallLine(line, useColor, num)
-	} else {
-		if strings.HasPrefix(line, "\t") {
-			return strings.Replace(line, "\t", "      ", 1), nil
-		} else {
-			return fmt.Sprintf("    %s\n", line), nil
-		}
+		return s.decorateSourceLine(line, num)
 	}
+	if strings.HasSuffix(line, ")") {
+		return s.decorateFuncCallLine(line, num)
+	}
+	if strings.HasPrefix(line, "\t") {
+		return strings.Replace(line, "\t", "      ", 1), nil
+	}
+	return fmt.Sprintf("    %s\n", line), nil
 }
 
-func (s prettyStack) decorateFuncCallLine(line string, useColor bool, num int) (string, error) {
+func (s prettyStack) decorateFuncCallLine(line string, num int) (string, error) {
 	idx := strings.LastIndex(line, "(")
 	if idx < 0 {
 		return "", errors.New("not a func call line")
@@ -77,20 +78,20 @@ func (s prettyStack) decorateFuncCallLine(line string, useColor bool, num int) (
 
 	buf := &bytes.Buffer{}
 	pkg := line[0:idx]
-	// addr := line[idx:]
 	method := ""
 
-	idx = strings.LastIndex(pkg, string(os.PathSeparator))
-	if idx < 0 {
-		idx = strings.Index(pkg, ".")
-		method = pkg[idx:]
-		pkg = pkg[0:idx]
+	if idx := strings.LastIndex(pkg, string(os.PathSeparator)); idx < 0 {
+		if idx := strings.Index(pkg, "."); idx > 0 {
+			method = pkg[idx:]
+			pkg = pkg[0:idx]
+		}
 	} else {
 		method = pkg[idx+1:]
 		pkg = pkg[0 : idx+1]
-		idx = strings.Index(method, ".")
-		pkg += method[0:idx]
-		method = method[idx:]
+		if idx := strings.Index(method, "."); idx > 0 {
+			pkg += method[0:idx]
+			method = method[idx:]
+		}
 	}
 
 	if num == 0 {
@@ -100,11 +101,10 @@ func (s prettyStack) decorateFuncCallLine(line string, useColor bool, num int) (
 	}
 	fmt.Fprintf(buf, "%s", pkg)
 	fmt.Fprintf(buf, "%s\n", method)
-	// cW(buf, useColor, nBlack, "%s", addr)
 	return buf.String(), nil
 }
 
-func (s prettyStack) decorateSourceLine(line string, useColor bool, num int) (string, error) {
+func (s prettyStack) decorateSourceLine(line string, num int) (string, error) {
 	idx := strings.LastIndex(line, ".go:")
 	if idx < 0 {
 		return "", errors.New("not a source line")

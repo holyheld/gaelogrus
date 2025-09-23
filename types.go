@@ -16,11 +16,9 @@ const (
 	sDEFAULT   severity = "DEFAULT"
 	sDEBUG     severity = "DEBUG"
 	sINFO      severity = "INFO"
-	sNOTICE    severity = "NOTICE"
 	sWARNING   severity = "WARNING"
 	sERROR     severity = "ERROR"
 	sCRITICAL  severity = "CRITICAL"
-	sALERT     severity = "ALERT"
 	sEMERGENCY severity = "EMERGENCY"
 )
 
@@ -37,22 +35,36 @@ func TraceID(ctx context.Context) string {
 	return trace
 }
 
+type httpRequestEntry struct {
+	RequestMethod string `json:"requestMethod,omitempty"`
+	RequestURL    string `json:"requestUrl,omitempty"`
+	RequestSize   string `json:"requestSize,omitempty"`
+	Status        int    `json:"status,omitempty"`
+	ResponseSize  string `json:"responseSize,omitempty"`
+	UserAgent     string `json:"userAgent,omitempty"`
+	RemoteIP      string `json:"remoteIp,omitempty"`
+	ServerIP      string `json:"serverIp,omitempty"`
+	Referer       string `json:"referer,omitempty"`
+	Latency       string `json:"latency,omitempty"`
+	Protocol      string `json:"protocol,omitempty"`
+}
+
+type sourceLocationEntry struct {
+	File     string `json:"file,omitempty"`
+	Line     string `json:"line,omitempty"`
+	Function string `json:"function,omitempty"`
+}
+
 // this is JSON format for producing logs via stdout, but keeping them grouped by request
 type logEntry struct {
-	// (optional) Trace string for GAE log threading
-	Trace string `json:"logging.googleapis.com/trace,omitempty"`
-
-	// (optional) Span ID within the trace
-	// For Trace spans, this is the same format that the Trace API
-	// v2 uses: a 16-character hexadecimal encoding of an 8-byte
-	// array, such as "000000000000004a"
-	SpanID string `json:"logging.googleapis.com/spanId,omitempty"`
-
-	Severity string      `json:"severity,omitempty"`
-	Data     interface{} `json:"data,omitempty"`
-	Message  string      `json:"message"`
-	UserID   string      `json:"userId,omitempty"`
-	UserMeta interface{} `json:"userMeta,omitempty"`
+	LogName        string               `json:"logName"`
+	Trace          string               `json:"logging.googleapis.com/trace,omitempty"`
+	SpanID         string               `json:"logging.googleapis.com/spanId,omitempty"`
+	Severity       string               `json:"severity,omitempty"`
+	JSONPayload    interface{}          `json:"jsonPayload,omitempty"`
+	HTTPRequest    *httpRequestEntry    `json:"httpRequest,omitempty"`
+	Timestamp      string               `json:"timestamp"`
+	SourceLocation *sourceLocationEntry `json:"logging.googleapis.com/sourceLocation,omitempty"`
 }
 
 // ParseXCloudTraceContext parses provided header value in format of "X-Cloud-Trace-Context: TRACE_ID/SPAN_ID;o=TRACE_TRUE"

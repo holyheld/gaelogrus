@@ -1,7 +1,6 @@
 package gaelogrus
 
 import (
-	"os"
 	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
@@ -15,10 +14,8 @@ import (
 type LogContextKind string
 
 const (
-	LogTraceContextKey    LogContextKind = "logTraceID"
-	LogEntryContextKey    LogContextKind = "logEntry"
-	LogUserIDContextKey   LogContextKind = "logUserID"
-	LogUserMetaContextKey LogContextKind = "logUserMeta"
+	LogTraceContextKey LogContextKind = "logTraceID"
+	LogEntryContextKey LogContextKind = "logEntry"
 )
 
 // XCloudTraceContext middleware extracts the X-Cloud-Trace-Context
@@ -97,19 +94,17 @@ func RequestLogger(next http.Handler) http.Handler {
 				scheme = "https"
 			}
 
-			logger.WithFields(logrus.Fields{
-				"ts":          start.UTC().Format(time.RFC1123),
-				"http_scheme": scheme,
-				"http_proto":  r.Proto,
-				"http_method": r.Method,
-
-				"remote_addr": r.RemoteAddr,
-				"user_agent":  r.UserAgent(),
-
-				"uri":               fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI),
-				"resp_status":       responseData.status,
-				"resp_elapsed_ms":   float64(time.Since(start) / 1000000.0),
-				"resp_bytes_length": responseData.size,
+			logger.WithField("request", &httpRequestEntry{
+				RequestMethod: r.Method,
+				RequestURL:    fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI),
+				RequestSize:   fmt.Sprintf("%d", r.ContentLength),
+				Status:        responseData.status,
+				ResponseSize:  fmt.Sprintf("%d", responseData.size),
+				UserAgent:     r.UserAgent(),
+				RemoteIP:      r.RemoteAddr,
+				Referer:       r.Referer(),
+				Latency:       time.Since(start).String(),
+				Protocol:      r.Proto,
 			}).Log(getLogLevel(r, responseData.status), "request completed")
 		}()
 
@@ -123,21 +118,32 @@ func RequestLogger(next http.Handler) http.Handler {
 func Recoverer(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
-			if rvr := recover(); rvr != nil && rvr != http.ErrAbortHandler {
+			rvr := recover()
+			if rvr == nil {
+				return
+			}
 
-				logEntity := GetLogger(r.Context())
-				if logEntity != nil {
-					debugStack := debug.Stack()
-					s := prettyStack{}
-					out, err := s.parse(debugStack, rvr)
-					if err == nil {
-						logEntity.Error(string(out))
-					} else {
-						// print stdlib output as a fallback
-						os.Stderr.Write(debugStack)
-					}
-				}
+			if rvr == http.ErrAbortHandler {
+				// we don't recover http.ErrAbortHandler so the response
+				// to the client is aborted, this should not be logged
+				panic(rvr)
+			}
 
+			debugStack := debug.Stack()
+			s := prettyStack{}
+			out, err := s.parse(debugStack, rvr)
+			if err != nil {
+				out = debugStack
+			}
+
+			logEntity := GetLogger(r.Context())
+			if logEntity != nil {
+				logEntity.Error(string(out))
+			} else {
+				recovererErrorWriter.Write(out)
+			}
+
+			if r.Header.Get("Connection") != "Upgrade" {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 		}()
