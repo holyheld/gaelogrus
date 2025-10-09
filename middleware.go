@@ -85,46 +85,64 @@ func (w *loggingResponseWriter) WriteHeader(statusCode int) {
 }
 
 func RequestLogger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		logger := GetLogger(ctx)
+	innerLogger := GetRequestLoggerWithOption(GetRequestLoggetOptions{
+		LogLevelBasedOnStatus: true,
+	})
+	return innerLogger(next)
+}
 
-		start := time.Now()
+type GetRequestLoggetOptions struct {
+	LogLevelBasedOnStatus bool
+}
 
-		responseData := &responseData{
-			status: 0,
-			size:   0,
-		}
+func GetRequestLoggerWithOption(options GetRequestLoggetOptions) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			logger := GetLogger(ctx)
 
-		lw := loggingResponseWriter{
-			ResponseWriter: w,
-			responseData:   responseData,
-		}
+			start := time.Now()
 
-		defer func() {
-			scheme := "http"
-			if r.TLS != nil {
-				scheme = "https"
+			responseData := &responseData{
+				status: 0,
+				size:   0,
 			}
 
-			logger.WithFields(logrus.Fields{
-				"ts":          start.UTC().Format(time.RFC1123),
-				"http_scheme": scheme,
-				"http_proto":  r.Proto,
-				"http_method": r.Method,
+			lw := loggingResponseWriter{
+				ResponseWriter: w,
+				responseData:   responseData,
+			}
 
-				"remote_addr": r.RemoteAddr,
-				"user_agent":  r.UserAgent(),
+			defer func() {
+				scheme := "http"
+				if r.TLS != nil {
+					scheme = "https"
+				}
 
-				"uri":               fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI),
-				"resp_status":       responseData.status,
-				"resp_elapsed_ms":   float64(time.Since(start) / 1000000.0),
-				"resp_bytes_length": responseData.size,
-			}).Log(getLogLevel(r, responseData.status), "request completed")
-		}()
+				logLevel := logrus.InfoLevel
+				if options.LogLevelBasedOnStatus {
+					logLevel = getLogLevel(r, responseData.status)
+				}
 
-		next.ServeHTTP(&lw, r)
-	})
+				logger.WithFields(logrus.Fields{
+					"ts":          start.UTC().Format(time.RFC1123),
+					"http_scheme": scheme,
+					"http_proto":  r.Proto,
+					"http_method": r.Method,
+
+					"remote_addr": r.RemoteAddr,
+					"user_agent":  r.UserAgent(),
+
+					"uri":               fmt.Sprintf("%s://%s%s", scheme, r.Host, r.RequestURI),
+					"resp_status":       responseData.status,
+					"resp_elapsed_ms":   float64(time.Since(start) / 1000000.0),
+					"resp_bytes_length": responseData.size,
+				}).Log(logLevel, "request completed")
+			}()
+
+			next.ServeHTTP(&lw, r)
+		})
+	}
 }
 
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
